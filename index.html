@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>장애인 화장실 찾기</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <header>
+      <span>♿</span>
+      <h1>장애인 화장실 찾기</h1>
+    </header>
+
+    <div id="controls">
+      <div id="location-info">
+        <span id="loc-status">🏁 위치 확인 중...</span>
+      </div>
+
+      <div id="radius-wrap">
+        <span>반경</span>
+        <button class="radius-btn active" onclick="setRadius(500, this)">500m</button>
+        <button class="radius-btn" onclick="setRadius(1000, this)">1km</button>
+        <button class="radius-btn" onclick="setRadius(2000, this)">2km</button>
+        <button class="radius-btn" onclick="setRadius(5000, this)">5km</button>
+      </div>
+
+      <button onclick="showManualSearch()"
+        style="padding:7px 12px; background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:8px; font-size:0.8rem; font-weight:700; cursor:pointer;">
+        🏁 위치 변경
+      </button>
+
+      <button id="search-btn" onclick="searchToilets()">
+        ♿ 주변 검색
+      </button>
+
+      <!-- 수동 주소 검색 -->
+      <div id="manual-search" style="display:none; width:100%; gap:8px; margin-top:8px;">
+        <input
+          id="addr-input"
+          type="text"
+          placeholder="주소 또는 지역명 입력 (예: 수원시 팔달구)"
+          style="flex:1; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.82rem; outline:none;"
+          onkeydown="if(event.key==='Enter') searchAddress()"
+        />
+        <button onclick="searchAddress()"
+          style="padding:8px 14px; background:#1d4ed8; color:white; border:none; border-radius:8px; font-size:0.82rem; font-weight:700; cursor:pointer;">
+          검색
+        </button>
+      </div>
+
+    </div>
+
+    <div id="map"></div>
+
+    <div id="result-panel">
+      <div id="result-header">
+        <span id="result-title">검색 결과</span>
+        <span id="result-count"></span>
+      </div>
+      <div id="result-list"></div>
+    </div>
+
+  </div>
+
+  <script src="map.js"></script>
+</body>
+</html>
