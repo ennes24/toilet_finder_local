@@ -1,30 +1,24 @@
 let map, userMarker, radius = 500;
 let toiletMarkers = [];
 let userLat = null, userLng = null;
+let radiusCircle = null;
 let votedToilets = JSON.parse(localStorage.getItem('voted') || '{}');
 
-// 지도 초기화
 function initMap() {
   map = L.map('map').setView([37.2636, 127.0286], 13);
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
-
   getLocation();
 }
 
-// 현재 위치 가져오기
 function getLocation() {
   const status = document.getElementById('loc-status');
-
   if (!navigator.geolocation) {
     showManualSearch();
     return;
   }
-
   status.textContent = '🏁위치 확인 중...';
-
   navigator.geolocation.getCurrentPosition(
     pos => {
       userLat = pos.coords.latitude;
@@ -41,47 +35,38 @@ function getLocation() {
   );
 }
 
-// 수동 검색창 표시
 function showManualSearch() {
   document.getElementById('manual-search').style.display = 'flex';
   document.getElementById('addr-input').focus();
 }
 
-// 주소로 위치 검색
 async function searchAddress() {
   const query = document.getElementById('addr-input').value.trim();
   if (!query) return;
-
   const status = document.getElementById('loc-status');
   status.textContent = '🏁 주소 검색 중...';
-
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ko`
     );
     const data = await res.json();
-
     if (!data || data.length === 0) {
       alert('주소를 찾을 수 없어요. 다시 입력해주세요.');
       status.textContent = '🏁 위치 없음';
       return;
     }
-
     userLat = parseFloat(data[0].lat);
     userLng = parseFloat(data[0].lon);
     status.textContent = `🏁 ${query}`;
     setLocation(userLat, userLng);
-
     document.getElementById('manual-search').style.display = 'none';
     document.getElementById('addr-input').value = '';
-
   } catch (err) {
     alert('주소 검색 중 오류가 발생했어요.');
     console.error(err);
   }
 }
 
-// 위치 설정 및 지도 이동
 function setLocation(lat, lng) {
   map.setView([lat, lng], 15);
 
@@ -94,7 +79,8 @@ function setLocation(lat, lng) {
     weight: 3
   }).addTo(map).bindPopup('🏁 현재 위치');
 
-  L.circle([lat, lng], {
+  if (radiusCircle) radiusCircle.remove();
+  radiusCircle = L.circle([lat, lng], {
     radius: radius,
     color: '#1d4ed8',
     fillColor: '#1d4ed8',
@@ -104,15 +90,25 @@ function setLocation(lat, lng) {
   }).addTo(map);
 }
 
-// 반경 설정
 function setRadius(r, btn) {
   radius = r;
   document.querySelectorAll('.radius-btn')
     .forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+
+  if (radiusCircle && userLat && userLng) {
+    radiusCircle.remove();
+    radiusCircle = L.circle([userLat, userLng], {
+      radius: radius,
+      color: '#1d4ed8',
+      fillColor: '#1d4ed8',
+      fillOpacity: 0.05,
+      weight: 1,
+      dashArray: '6'
+    }).addTo(map);
+  }
 }
 
-// 화장실 검색
 async function searchToilets() {
   if (!userLat || !userLng) {
     alert('위치를 먼저 설정해주세요.');
@@ -132,12 +128,9 @@ async function searchToilets() {
       `/api/toilets?lat=${userLat}&lng=${userLng}&radius=${radius}`
     );
     const json = await res.json();
-
     if (!json.success) throw new Error(json.message);
-
     renderMarkers(json.data);
     renderList(json.data);
-
   } catch (err) {
     console.error(err);
     alert('검색 중 오류가 발생했습니다: ' + err.message);
@@ -147,7 +140,6 @@ async function searchToilets() {
   btn.textContent = '♿ 주변 검색';
 }
 
-// 마커 렌더링
 function renderMarkers(data) {
   const icon = L.divIcon({
     html: `<div style="
@@ -170,7 +162,6 @@ function renderMarkers(data) {
 
   data.forEach((toilet, i) => {
     if (!toilet.lat || !toilet.lng) return;
-
     const distStr = toilet.distance < 1000
       ? `${Math.round(toilet.distance)}m`
       : `${(toilet.distance / 1000).toFixed(1)}km`;
@@ -191,16 +182,13 @@ function renderMarkers(data) {
           <span>👎 ${toilet.dislikes || 0}</span>
         </div>
       `);
-
     toiletMarkers.push(marker);
   });
 }
 
-// 목록 렌더링
 function renderList(data) {
   const list = document.getElementById('result-list');
   const count = document.getElementById('result-count');
-
   count.textContent = `${data.length}개`;
 
   if (data.length === 0) {
@@ -213,6 +201,7 @@ function renderList(data) {
   }
 
   list.innerHTML = data.map((toilet, i) => {
+    const sid = toilet.id.replace(/\./g, '_');
     const distStr = toilet.distance < 1000
       ? `${Math.round(toilet.distance)}m`
       : `${(toilet.distance / 1000).toFixed(1)}km`;
@@ -221,10 +210,9 @@ function renderList(data) {
     const likeRate = total > 0
       ? Math.round(((toilet.likes || 0) / total) * 100)
       : 0;
-    const hasVoted = votedToilets[toilet.id];
 
     return `
-      <div class="toilet-card" id="card-${toilet.id}" onclick="focusMarker(${i})">
+      <div class="toilet-card" id="card-${sid}" onclick="focusMarker(${i})">
         <div class="card-top">
           <div class="card-name">♿ ${toilet.name}</div>
           <div class="card-dist">${distStr}</div>
@@ -242,40 +230,37 @@ function renderList(data) {
             : ''}
         </div>
 
-        ${total > 0 ? `
-        <div class="vote-gauge">
-          <div class="gauge-bar">
-            <div class="gauge-fill" style="width:${likeRate}%"></div>
-          </div>
-          <div class="gauge-label">
-            <span>관리 양호 ${likeRate}%</span>
-            <span>총 ${total}명 참여</span>
-          </div>
+        ${total >= 5 ? `
+        <div class="vote-status">
+          ${likeRate >= 80
+            ? '<span class="status-badge status-good">🟢 양호</span>'
+            : likeRate >= 50
+            ? '<span class="status-badge status-normal">🟡 보통</span>'
+            : '<span class="status-badge status-bad">🔴 불량</span>'
+          }
+          <span class="vote-count">👍 ${toilet.likes} &nbsp; 👎 ${toilet.dislikes} &nbsp; (${total}명 참여)</span>
         </div>` : ''}
 
         <div class="vote-btns" onclick="event.stopPropagation()">
           <button
-            class="vote-btn like-btn ${hasVoted === 'like' ? 'voted' : ''}"
+            class="vote-btn like-btn"
             onclick="vote('${toilet.id}', 'like', ${i})"
-            ${hasVoted ? 'disabled' : ''}
           >
-            👍 관리 잘 됨 <span id="likes-${toilet.id}">${toilet.likes || 0}</span>
+            👍 관리 잘 됨 <span id="likes-${sid}">${toilet.likes || 0}</span>
           </button>
           <button
-            class="vote-btn dislike-btn ${hasVoted === 'dislike' ? 'voted' : ''}"
+            class="vote-btn dislike-btn"
             onclick="vote('${toilet.id}', 'dislike', ${i})"
-            ${hasVoted ? 'disabled' : ''}
           >
-            👎 관리 안 됨 <span id="dislikes-${toilet.id}">${toilet.dislikes || 0}</span>
+            👎 관리 안 됨 <span id="dislikes-${sid}">${toilet.dislikes || 0}</span>
           </button>
         </div>
       </div>`;
   }).join('');
 }
 
-// 투표
-async function vote(toiletId, type, markerIndex) {
-  if (votedToilets[toiletId]) return;
+async function vote(toiletId, type, index) {
+  const sid = toiletId.replace(/\./g, '_');
 
   try {
     const res = await fetch('/api/vote', {
@@ -286,41 +271,37 @@ async function vote(toiletId, type, markerIndex) {
     const json = await res.json();
     if (!json.success) throw new Error(json.message);
 
-    votedToilets[toiletId] = type;
-    localStorage.setItem('voted', JSON.stringify(votedToilets));
-
-    document.getElementById(`likes-${toiletId}`).textContent = json.likes;
-    document.getElementById(`dislikes-${toiletId}`).textContent = json.dislikes;
-
-    const card = document.getElementById(`card-${toiletId}`);
-    card.querySelectorAll('.vote-btn').forEach(btn => btn.disabled = true);
-    card.querySelector(`.${type === 'like' ? 'like' : 'dislike'}-btn`).classList.add('voted');
+    document.getElementById(`likes-${sid}`).textContent = json.likes;
+    document.getElementById(`dislikes-${sid}`).textContent = json.dislikes;
 
     const total = json.likes + json.dislikes;
     const likeRate = total > 0 ? Math.round((json.likes / total) * 100) : 0;
-    const gauge = card.querySelector('.gauge-fill');
-    if (gauge) {
-      gauge.style.width = `${likeRate}%`;
-    } else {
-      card.querySelector('.card-tags').insertAdjacentHTML('afterend', `
-        <div class="vote-gauge">
-          <div class="gauge-bar">
-            <div class="gauge-fill" style="width:${likeRate}%"></div>
-          </div>
-          <div class="gauge-label">
-            <span>관리 양호 ${likeRate}%</span>
-            <span>총 ${total}명 참여</span>
-          </div>
-        </div>
-      `);
+    const card = document.getElementById(`card-${sid}`);
+
+    const statusHtml = total >= 5 ? `
+      <div class="vote-status">
+        ${likeRate >= 80
+          ? '<span class="status-badge status-good">🟢 양호</span>'
+          : likeRate >= 50
+          ? '<span class="status-badge status-normal">🟡 보통</span>'
+          : '<span class="status-badge status-bad">🔴 불량</span>'
+        }
+        <span class="vote-count">👍 ${json.likes} &nbsp; 👎 ${json.dislikes} &nbsp; (${total}명 참여)</span>
+      </div>` : '';
+
+    const existing = card.querySelector('.vote-status');
+    if (existing) {
+      existing.outerHTML = statusHtml;
+    } else if (statusHtml) {
+      card.querySelector('.vote-btns').insertAdjacentHTML('beforebegin', statusHtml);
     }
+
   } catch (err) {
     console.error(err);
     alert('투표 중 오류가 발생했습니다.');
   }
 }
 
-// 카드 클릭시 마커 포커스
 function focusMarker(index) {
   const marker = toiletMarkers[index];
   if (!marker) return;
@@ -328,5 +309,4 @@ function focusMarker(index) {
   marker.openPopup();
 }
 
-// 시작
 initMap();
